@@ -1,40 +1,66 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import {
-  Plus, X, Calendar, ChevronLeft, ChevronRight, User, MoreHorizontal, Check,
-  Pencil, FolderOpen, FileText, Download, LayoutDashboard, Trello, Settings,
-  LogOut, PieChart, AlertCircle, Clock, Lightbulb, ArrowRight, ArrowLeft, Trash2,
-  Rocket, Eye, EyeOff, Target, Share2, Instagram, Youtube, Twitter, Video, Image as ImageIcon
+import { 
+  Plus, X, Calendar, ChevronLeft, ChevronRight, User, MoreHorizontal, Check, 
+  Pencil, FolderOpen, FileText, Download, LayoutDashboard, Trello, Settings, 
+  LogOut, PieChart, AlertCircle, Clock, Lightbulb, ArrowRight, ArrowLeft, Trash2, 
+  Rocket, Eye, EyeOff, Target, Share2, Instagram, Youtube, Twitter, Video, Image as ImageIcon,
+  Database, Cloud
 } from 'lucide-react';
 
-// --- AZURE IMPORTS ---
-import { MsalProvider, useMsal, useIsAuthenticated } from '@azure/msal-react';
+// ==========================================
+// 1. CONSTANTS & CONFIG (Defined First)
+// ==========================================
 
-// Use serverless API (Azure Functions) under `/api` to interact with Cosmos DB.
-const API_BASE = '/api';
+const INITIAL_ARTISTS = ['Salini', 'Jeki'];
 
-async function apiFetch(path, opts = {}) {
-  const res = await fetch(`${API_BASE}/${path}`, opts);
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(txt || `${res.status} ${res.statusText}`);
-  }
-  const ct = res.headers.get('content-type') || '';
-  if (ct.includes('application/json')) return res.json();
-  return null;
-}
-
-const api = {
-  getTasks: (userId) => apiFetch(`tasks?userId=${encodeURIComponent(userId)}`),
-  upsertTask: (item) => apiFetch('tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) }),
-  deleteTask: (id, userId) => fetch(`${API_BASE}/tasks/${encodeURIComponent(id)}?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' }),
-
-  getIdeas: (userId) => apiFetch(`ideas?userId=${encodeURIComponent(userId)}`),
-  upsertIdea: (item) => apiFetch('ideas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) }),
-  deleteIdea: (id, userId) => fetch(`${API_BASE}/ideas/${encodeURIComponent(id)}?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' }),
-
-  getArtists: (userId) => apiFetch(`artists?userId=${encodeURIComponent(userId)}`),
-  upsertArtists: (payload) => apiFetch('artists', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
+const COLOR_MAP = {
+  green: { pale: 'bg-emerald-200', vivid: 'bg-emerald-500' },
+  yellow: { pale: 'bg-amber-200', vivid: 'bg-amber-500' },
+  red: { pale: 'bg-rose-200', vivid: 'bg-rose-600' },
+  blue: { pale: 'bg-sky-200', vivid: 'bg-sky-500' },
+  orange: { pale: 'bg-orange-200', vivid: 'bg-orange-500' },
+  purple: { pale: 'bg-purple-200', vivid: 'bg-purple-500' },
+  social: { pale: 'bg-violet-200', vivid: 'bg-violet-600' }
 };
+
+const RETAIL_CYCLES = [
+    { 
+      name: "Summer Readiness", 
+      startMonth: 0, 
+      endMonth: 2, 
+      color: "bg-yellow-50", 
+      dot: "bg-yellow-400",
+      textColor: "text-yellow-700",
+      targetDates: ["Memorial Day", "Father's Day", "Summer Travel"]
+    }, 
+    { 
+      name: "Back-to-School & Harvest", 
+      startMonth: 3, 
+      endMonth: 5, 
+      color: "bg-orange-50", 
+      dot: "bg-orange-400",
+      textColor: "text-orange-700",
+      targetDates: ["Back to School", "Labor Day", "Halloween Prep"]
+    }, 
+    { 
+      name: "Holiday Gifting", 
+      startMonth: 6, 
+      endMonth: 8, 
+      color: "bg-blue-50", 
+      dot: "bg-blue-400",
+      textColor: "text-blue-700",
+      targetDates: ["Black Friday", "Cyber Monday", "Christmas", "Hanukkah"]
+    }, 
+    { 
+      name: "Spring & Love", 
+      startMonth: 9, 
+      endMonth: 11, 
+      color: "bg-pink-50", 
+      dot: "bg-pink-400",
+      textColor: "text-pink-700",
+      targetDates: ["New Year's", "Valentine's Day", "Mother's Day"]
+    }, 
+];
 
 // --- HELPER FUNCTIONS ---
 
@@ -86,59 +112,6 @@ const getPositionStyles = (startDate, endDate, viewStart, viewEnd) => {
   };
 };
 
-// --- DATA & CONSTANTS ---
-
-const COLOR_MAP = {
-  green: { pale: 'bg-emerald-200', vivid: 'bg-emerald-500' },
-  yellow: { pale: 'bg-amber-200', vivid: 'bg-amber-500' },
-  red: { pale: 'bg-rose-200', vivid: 'bg-rose-600' },
-  blue: { pale: 'bg-sky-200', vivid: 'bg-sky-500' },
-  orange: { pale: 'bg-orange-200', vivid: 'bg-orange-500' },
-  purple: { pale: 'bg-purple-200', vivid: 'bg-purple-500' },
-  social: { pale: 'bg-violet-200', vivid: 'bg-violet-600' }
-};
-
-const RETAIL_CYCLES = [
-    { 
-      name: "Summer Readiness", 
-      startMonth: 0, 
-      endMonth: 2, 
-      color: "bg-yellow-50", 
-      dot: "bg-yellow-400",
-      textColor: "text-yellow-700",
-      targetDates: ["Memorial Day", "Father's Day", "Summer Travel"]
-    }, 
-    { 
-      name: "Back-to-School & Harvest", 
-      startMonth: 3, 
-      endMonth: 5, 
-      color: "bg-orange-50", 
-      dot: "bg-orange-400",
-      textColor: "text-orange-700",
-      targetDates: ["Back to School", "Labor Day", "Halloween Prep"]
-    }, 
-    { 
-      name: "Holiday Gifting", 
-      startMonth: 6, 
-      endMonth: 8, 
-      color: "bg-blue-50", 
-      dot: "bg-blue-400",
-      textColor: "text-blue-700",
-      targetDates: ["Black Friday", "Cyber Monday", "Christmas", "Hanukkah"]
-    }, 
-    { 
-      name: "Spring & Love", 
-      startMonth: 9, 
-      endMonth: 11, 
-      color: "bg-pink-50", 
-      dot: "bg-pink-400",
-      textColor: "text-pink-700",
-      targetDates: ["New Year's", "Valentine's Day", "Mother's Day"]
-    }, 
-];
-
-const INITIAL_ARTISTS = ['Salini', 'Jeki'];
-
 const SEED_TASKS = [
   {
     id: 'seed-1',
@@ -147,12 +120,12 @@ const SEED_TASKS = [
     name: 'Xmas Guide',
     briefing: 'Main campaign visual.',
     folderUrl: '',
-    startDate: getRelativeDate(-5),
-    deadline: getRelativeDate(20),
+    startDate: getRelativeDate(-5).toISOString(),
+    deadline: getRelativeDate(20).toISOString(),
     phases: [
-      { id: 'p1', name: 'Draft', endDate: getRelativeDate(0), color: 'green', progress: 100 },
-      { id: 'p2', name: 'Refine', endDate: getRelativeDate(10), color: 'yellow', progress: 40 },
-      { id: 'p3', name: 'Final', endDate: getRelativeDate(20), color: 'red', progress: 0 },
+      { id: 'p1', name: 'Draft', endDate: getRelativeDate(0).toISOString(), color: 'green', progress: 100 },
+      { id: 'p2', name: 'Refine', endDate: getRelativeDate(10).toISOString(), color: 'yellow', progress: 40 },
+      { id: 'p3', name: 'Final', endDate: getRelativeDate(20).toISOString(), color: 'red', progress: 0 },
     ]
   },
   {
@@ -163,53 +136,117 @@ const SEED_TASKS = [
     name: 'Xmas Teaser Reel',
     briefing: '15s animation for IG Story',
     folderUrl: '',
-    startDate: getRelativeDate(5),
-    deadline: getRelativeDate(12),
+    startDate: getRelativeDate(5).toISOString(),
+    deadline: getRelativeDate(12).toISOString(),
     phases: [
-        { id: 'sp1', name: 'Production', endDate: getRelativeDate(12), color: 'social', progress: 20 }
+        { id: 'sp1', name: 'Production', endDate: getRelativeDate(12).toISOString(), color: 'social', progress: 20 }
     ]
   }
 ];
 
-// --- COMPONENTS ---
+// ==========================================
+// 2. DATA SERVICE (Mocking Azure for UI)
+// ==========================================
+
+const MOCK_DELAY = 600; 
+
+const mockApiCall = (data, delay = MOCK_DELAY) => 
+  new Promise(resolve => setTimeout(() => resolve(data), delay));
+
+// Internal Mock Database state
+let MOCK_DB = {
+  tasks: [...SEED_TASKS],
+  ideas: [],
+  artists: [...INITIAL_ARTISTS]
+};
+
+const DataService = {
+  getUser: async () => {
+    // In real Azure, fetch('/.auth/me')
+    return mockApiCall({ 
+      userId: 'mock-user-id', 
+      userDetails: 'studio_manager@example.com', 
+      userRoles: ['authenticated'] 
+    }, 200);
+  },
+  getTasks: async () => mockApiCall([...MOCK_DB.tasks]),
+  saveTask: async (task) => {
+    const idx = MOCK_DB.tasks.findIndex(t => t.id === task.id);
+    if (idx >= 0) MOCK_DB.tasks[idx] = task;
+    else MOCK_DB.tasks.push(task);
+    return mockApiCall(task);
+  },
+  deleteTask: async (taskId) => {
+    MOCK_DB.tasks = MOCK_DB.tasks.filter(t => t.id !== taskId);
+    return mockApiCall(true);
+  },
+  getIdeas: async () => mockApiCall([...MOCK_DB.ideas]),
+  saveIdea: async (idea) => {
+    const idx = MOCK_DB.ideas.findIndex(i => i.id === idea.id);
+    if (idx >= 0) MOCK_DB.ideas[idx] = idea;
+    else {
+        if(!idea.id) idea.id = String(Date.now());
+        MOCK_DB.ideas.push(idea);
+    }
+    return mockApiCall(idea);
+  },
+  deleteIdea: async (ideaId) => {
+    MOCK_DB.ideas = MOCK_DB.ideas.filter(i => i.id !== ideaId);
+    return mockApiCall(true);
+  },
+  getArtists: async () => mockApiCall([...MOCK_DB.artists]),
+  addArtist: async (name) => {
+    if (!MOCK_DB.artists.includes(name)) {
+        MOCK_DB.artists.push(name);
+    }
+    return mockApiCall([...MOCK_DB.artists]);
+  }
+};
+
+// ==========================================
+// 3. UI COMPONENTS
+// ==========================================
 
 const Sidebar = ({ activeTab, onNavigate }) => (
     <div className="w-64 bg-gray-900 text-white flex flex-col h-full flex-shrink-0">
       <div className="p-6 border-b border-gray-800">
         <div className="text-xl font-bold tracking-wider flex items-center gap-2">
-          <div className="w-8 h-8 bg-pink-500 rounded-lg flex items-center justify-center font-black">S</div>
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-black">
+            <Cloud size={18} className="text-white"/>
+          </div>
           STUDIO
         </div>
-        <div className="text-xs text-gray-500 mt-1 uppercase tracking-widest">Portal v3.0</div>
+        <div className="text-xs text-gray-500 mt-1 uppercase tracking-widest flex items-center gap-1">
+            Azure Portal v3.0
+        </div>
       </div>
       <nav className="flex-1 p-4 space-y-2">
-        <button onClick={() => onNavigate('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-pink-600 text-white shadow-lg shadow-pink-900/20' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+        <button onClick={() => onNavigate('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
           <LayoutDashboard size={20} /><span className="font-medium">Dashboard</span>
         </button>
-        <button onClick={() => onNavigate('timeline')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'timeline' ? 'bg-pink-600 text-white shadow-lg shadow-pink-900/20' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+        <button onClick={() => onNavigate('timeline')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'timeline' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
           <Trello size={20} /><span className="font-medium">Schedule</span>
         </button>
-        <button onClick={() => onNavigate('social')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'social' ? 'bg-pink-600 text-white shadow-lg shadow-pink-900/20' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+        <button onClick={() => onNavigate('social')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'social' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
           <Share2 size={20} /><span className="font-medium">Social Media</span>
         </button>
-        <button onClick={() => onNavigate('pipeline')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'pipeline' ? 'bg-pink-600 text-white shadow-lg shadow-pink-900/20' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+        <button onClick={() => onNavigate('pipeline')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'pipeline' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
           <Lightbulb size={20} /><span className="font-medium">Idea Lab</span>
         </button>
-        <button onClick={() => onNavigate('strategy')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'strategy' ? 'bg-pink-600 text-white shadow-lg shadow-pink-900/20' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+        <button onClick={() => onNavigate('strategy')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'strategy' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
           <Target size={20} /><span className="font-medium">Strategy</span>
         </button>
       </nav>
       <div className="p-4 border-t border-gray-800">
         <div className="flex items-center gap-3 px-4 py-2">
             <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center"><User size={14} className="text-gray-400" /></div>
-            <div className="flex-1 overflow-hidden"><div className="text-sm font-medium truncate">Studio User</div><div className="text-xs text-gray-500 truncate">Online</div></div>
+            <div className="flex-1 overflow-hidden"><div className="text-sm font-medium truncate">Studio User</div><div className="text-xs text-gray-500 truncate">Azure AD</div></div>
         </div>
       </div>
     </div>
 );
 
-// --- SOCIAL TASK MODAL ---
-const SocialTaskModal = ({ isOpen, onClose, onSave, artists, onAddArtist, initialData }) => {
+const SocialTaskModal = ({ isOpen, onClose, onSave, artists, initialData, onAddArtist }) => {
     const [formData, setFormData] = useState({
         name: '',
         artist: '',
@@ -220,8 +257,19 @@ const SocialTaskModal = ({ isOpen, onClose, onSave, artists, onAddArtist, initia
         startDate: formatDateForInput(new Date()),
         deadline: ''
     });
+    
+    // Resource Management
     const [newArtistName, setNewArtistName] = useState('');
     const [isAddingArtist, setIsAddingArtist] = useState(false);
+
+    const saveNewArtist = async () => { 
+        if(newArtistName) { 
+            await onAddArtist(newArtistName); 
+            setFormData(prev => ({...prev, artist: newArtistName})); 
+            setNewArtistName(''); 
+            setIsAddingArtist(false); 
+        } 
+    };
 
     useEffect(() => {
         if (isOpen) {
@@ -266,8 +314,8 @@ const SocialTaskModal = ({ isOpen, onClose, onSave, artists, onAddArtist, initia
             artist: formData.artist || 'Unassigned',
             name: `${formData.platform}: ${formData.name}`,
             briefing: formData.briefing,
-            startDate: safeStartDate,
-            deadline: safeDeadline,
+            startDate: safeStartDate.toISOString(),
+            deadline: safeDeadline.toISOString(),
             platform: formData.platform,
             folderUrl: formData.folderUrl,
             phases: initialData ? initialData.phases : [{
@@ -275,21 +323,16 @@ const SocialTaskModal = ({ isOpen, onClose, onSave, artists, onAddArtist, initia
                 name: 'Production',
                 color: 'social',
                 progress: 0,
-                endDate: safeDeadline
+                endDate: safeDeadline.toISOString()
             }]
         };
-        if (newTask.phases.length > 0) newTask.phases[0].endDate = safeDeadline;
+        
+        if (newTask.phases.length > 0 && (!initialData || newTask.phases[0].endDate !== safeDeadline.toISOString())) {
+             newTask.phases[0].endDate = safeDeadline.toISOString();
+        }
+
         onSave(newTask);
         onClose();
-    };
-
-    const saveNewArtist = () => { 
-        if(newArtistName) { 
-            onAddArtist(newArtistName); 
-            setFormData({...formData, artist: newArtistName}); 
-            setNewArtistName(''); 
-            setIsAddingArtist(false); 
-        } 
     };
 
     return (
@@ -337,7 +380,6 @@ const SocialTaskModal = ({ isOpen, onClose, onSave, artists, onAddArtist, initia
     );
 };
 
-// --- TASK FORM ---
 const TaskForm = ({ isOpen, onClose, onSave, artists, onAddArtist, initialData, prefillData }) => {
   const [formData, setFormData] = useState({
     artist: '',
@@ -396,7 +438,6 @@ const TaskForm = ({ isOpen, onClose, onSave, artists, onAddArtist, initialData, 
   const handleSubmit = () => {
     if (!formData.taskName || !formData.startDate) return;
     
-    // Ensure all phase dates are valid (fallback to task deadline or start date if missing)
     const validPhases = formData.phases.map(p => ({
         ...p,
         endDate: p.endDate ? p.endDate : (formData.deadline || formData.startDate)
@@ -415,8 +456,8 @@ const TaskForm = ({ isOpen, onClose, onSave, artists, onAddArtist, initialData, 
       name: formData.taskName,
       briefing: formData.briefing,
       folderUrl: formData.folderUrl,
-      startDate: safeStartDate,
-      deadline: safeDeadline,
+      startDate: safeStartDate.toISOString(),
+      deadline: safeDeadline.toISOString(),
       phases: sortedPhases.map((p, idx) => {
         let assignedColor = 'green';
         if (idx === totalPhases - 1) assignedColor = 'red';
@@ -427,7 +468,7 @@ const TaskForm = ({ isOpen, onClose, onSave, artists, onAddArtist, initialData, 
             name: p.name, 
             color: assignedColor, 
             progress: p.progress || 0, 
-            endDate: new Date(p.endDate) 
+            endDate: new Date(p.endDate).toISOString() 
         };
       })
     };
@@ -435,9 +476,9 @@ const TaskForm = ({ isOpen, onClose, onSave, artists, onAddArtist, initialData, 
     onClose();
   };
 
-  const saveNewArtist = () => { 
+  const saveNewArtist = async () => { 
       if(newArtistName) { 
-          onAddArtist(newArtistName); 
+          await onAddArtist(newArtistName); 
           setFormData({...formData, artist: newArtistName}); 
           setNewArtistName(''); 
           setIsAddingArtist(false); 
@@ -497,7 +538,6 @@ const TaskForm = ({ isOpen, onClose, onSave, artists, onAddArtist, initialData, 
   );
 };
 
-// --- TIMELINE VIEW ---
 const Timeline = ({ tasks, onUpdateProgress, onEditTask, onViewBrief, setEditingTask, setIsFormOpen }) => {
   const [viewStart, setViewStart] = useState(getRelativeDate(-10));
   const daysToShow = 40; 
@@ -507,7 +547,6 @@ const Timeline = ({ tasks, onUpdateProgress, onEditTask, onViewBrief, setEditing
   const [activePhase, setActivePhase] = useState(null); 
   const calendarDays = useMemo(() => { const days = []; let current = new Date(viewStart); for (let i = 0; i < daysToShow; i++) { days.push(new Date(current)); current.setDate(current.getDate() + 1); } return days; }, [viewStart, daysToShow]);
   
-  // Group and Sort Tasks by Artist
   const groupedTasks = useMemo(() => {
     const groups = {};
     tasks.forEach(t => {
@@ -515,17 +554,14 @@ const Timeline = ({ tasks, onUpdateProgress, onEditTask, onViewBrief, setEditing
       if (!groups[artist]) groups[artist] = [];
       groups[artist].push(t);
     });
-
     const sortedArtists = Object.keys(groups).sort((a, b) => {
         if (a === 'Unassigned') return 1;
         if (b === 'Unassigned') return -1;
         return a.localeCompare(b);
     });
-
     sortedArtists.forEach(artist => {
         groups[artist].sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
     });
-
     return { sortedArtists, groups };
   }, [tasks]);
 
@@ -606,7 +642,6 @@ const Timeline = ({ tasks, onUpdateProgress, onEditTask, onViewBrief, setEditing
                     </div>
                     <div className="flex-1 bg-gray-50/50"></div>
                 </div>
-
                 {groupedTasks.groups[artist].map(task => (
                     <div key={task.id} className="flex h-24 border-b border-gray-100 relative group hover:bg-gray-50/50 transition-colors">
                         <div className="w-48 flex-shrink-0 border-r border-gray-200 bg-white z-10 p-3 flex flex-col justify-center gap-2 group-hover:bg-gray-50/50">
@@ -623,8 +658,8 @@ const Timeline = ({ tasks, onUpdateProgress, onEditTask, onViewBrief, setEditing
                         </div>
                         <div className="flex-1 relative my-auto h-12">
                         {task.phases.map((phase, idx) => {
-                            const pStart = idx === 0 ? task.startDate : task.phases[idx - 1].endDate;
-                            const pEnd = phase.endDate;
+                            const pStart = new Date(idx === 0 ? task.startDate : task.phases[idx - 1].endDate);
+                            const pEnd = new Date(phase.endDate);
                             const style = getPositionStyles(pStart, pEnd, viewStart, viewEnd);
                             if (style.display === 'none') return null; 
                             const colors = phase.color === 'social' ? COLOR_MAP.social : (COLOR_MAP[phase.color] || COLOR_MAP.green);
@@ -672,6 +707,7 @@ const BriefModal = ({ isOpen, onClose, task }) => {
 };
 
 const SocialView = ({ tasks, onRequestAsset, onUpdateProgress, onDeleteTask }) => {
+    // Uses parent's onRequestAsset prop instead of local state to ensure consistent modal
     const socialTasks = tasks.filter(t => t.type === 'social');
     const inProduction = socialTasks.filter(t => t.phases[0].progress < 100);
     const readyToPost = socialTasks.filter(t => t.phases[0].progress === 100);
@@ -681,7 +717,7 @@ const SocialView = ({ tasks, onRequestAsset, onUpdateProgress, onDeleteTask }) =
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-hidden min-h-0">
                 <div className="flex flex-col h-full rounded-2xl border border-violet-100 bg-violet-50/50 overflow-hidden">
                     <div className="p-4 flex items-center gap-2 border-b border-violet-200/50 bg-violet-50"><div className="w-3 h-3 rounded-full bg-violet-500 animate-pulse"></div><span className="font-bold text-violet-900 text-sm uppercase tracking-wide">In Production (On Timeline)</span><span className="ml-auto text-xs font-bold text-violet-600 bg-white px-2 py-0.5 rounded-full border border-violet-100">{inProduction.length}</span></div>
-                    <div className="flex-1 overflow-y-auto p-3 space-y-3">{inProduction.map(task => (<div key={task.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-3"><div className="flex justify-between items-start"><div className="flex items-center gap-2">{task.platform === 'Instagram' && <Instagram size={16} className="text-pink-600"/>}{task.platform === 'YouTube' && <Youtube size={16} className="text-red-600"/>}{task.platform === 'Twitter/X' && <Twitter size={16} className="text-blue-400"/>}{(!['Instagram','YouTube','Twitter/X'].includes(task.platform)) && <Share2 size={16} className="text-gray-400"/>}<h4 className="font-bold text-gray-800 text-sm">{task.name}</h4></div><button onClick={() => onDeleteTask(task)} className="text-gray-300 hover:text-red-400"><Trash2 size={14}/></button></div><div className="flex justify-between items-center text-xs text-gray-500"><span className="bg-gray-100 px-2 py-1 rounded flex items-center gap-1"><User size={10} /> {task.artist}</span><span className={`px-2 py-1 rounded ${new Date(task.deadline) < new Date() ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'}`}>Due: {new Date(task.deadline).toLocaleDateString()}</span></div><div className="space-y-1"><div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase"><span>Progress</span><span>{task.phases[0].progress}%</span></div><input type="range" className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-violet-600" value={task.phases[0].progress} onChange={(e) => onUpdateProgress(task.id, task.phases[0].id, parseInt(e.target.value))} /></div></div>))}{inProduction.length === 0 && <div className="text-center py-10 text-gray-400 text-sm italic">No active social tasks.</div>}</div>
+                    <div className="flex-1 overflow-y-auto p-3 space-y-3">{inProduction.map(task => (<div key={task.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-3"><div className="flex justify-between items-start"><div className="flex items-center gap-2">{task.platform === 'Instagram' && <Instagram size={16} className="text-pink-600"/>}{task.platform === 'YouTube' && <Youtube size={16} className="text-red-600"/>}{task.platform === 'Twitter/X' && <Twitter size={16} className="text-blue-400"/>}{(!['Instagram','YouTube','Twitter/X'].includes(task.platform)) && <Share2 size={16} className="text-gray-400"/>}<h4 className="font-bold text-gray-800 text-sm">{task.name}</h4></div><button onClick={() => onDeleteTask(task.id)} className="text-gray-300 hover:text-red-400"><Trash2 size={14}/></button></div><div className="flex justify-between items-center text-xs text-gray-500"><span className="bg-gray-100 px-2 py-1 rounded flex items-center gap-1"><User size={10} /> {task.artist}</span><span className={`px-2 py-1 rounded ${new Date(task.deadline) < new Date() ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'}`}>Due: {new Date(task.deadline).toLocaleDateString()}</span></div><div className="space-y-1"><div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase"><span>Progress</span><span>{task.phases[0].progress}%</span></div><input type="range" className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-violet-600" value={task.phases[0].progress} onChange={(e) => onUpdateProgress(task.id, task.phases[0].id, parseInt(e.target.value))} /></div></div>))}{inProduction.length === 0 && <div className="text-center py-10 text-gray-400 text-sm italic">No active social tasks.</div>}</div>
                 </div>
                 <div className="flex flex-col h-full rounded-2xl border border-green-100 bg-green-50/50 overflow-hidden">
                     <div className="p-4 flex items-center gap-2 border-b border-green-200/50 bg-green-50"><div className="w-3 h-3 rounded-full bg-green-500"></div><span className="font-bold text-green-900 text-sm uppercase tracking-wide">Ready / Posted</span><span className="ml-auto text-xs font-bold text-green-600 bg-white px-2 py-0.5 rounded-full border border-green-100">{readyToPost.length}</span></div>
@@ -781,7 +817,6 @@ const PipelineView = ({ ideas, onAddIdea, onUpdateIdea, onMoveIdea, onDeleteIdea
                                 <div className="flex justify-between"><h5 className="font-bold text-sm">{idea.title}</h5>
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={()=>openEditIdeaModal(idea)}><Pencil size={10}/></button><button onClick={()=>onDeleteIdea(idea.id)}><Trash2 size={10}/></button></div>
                                 </div>
-                                {/* Description Preview */}
                                 <p className="text-xs text-gray-500 line-clamp-3 mb-3 whitespace-pre-wrap mt-2">{idea.description || "No description yet."}</p>
                                 <div className="flex justify-between mt-2">
                                     {col.id!=='inbox' && <button onClick={()=>onMoveIdea(idea,-1)}><ArrowLeft size={12}/></button>}
@@ -806,75 +841,23 @@ export default function App() {
   const [ideas, setIdeas] = useState([]);
   const [artists, setArtists] = useState(INITIAL_ARTISTS);
   const [activeTab, setActiveTab] = useState('social'); 
-  
-  // Modal Control
-  const [isFormOpen, setIsFormOpen] = useState(false); // TaskForm
-  const [isSocialFormOpen, setIsSocialFormOpen] = useState(false); // SocialTaskModal
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isSocialFormOpen, setIsSocialFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [viewingBriefTask, setViewingBriefTask] = useState(null);
   const [prefillFromIdea, setPrefillFromIdea] = useState(null);
 
-  const { instance, accounts } = useMsal();
-  const isAuthenticated = useIsAuthenticated();
-  const userId = accounts[0]?.localAccountId;
-
   useEffect(() => {
-    if (!isAuthenticated) {
-      instance.loginPopup().catch(console.error);
-    } else {
-      setUser(userId);
-    }
-  }, [isAuthenticated, instance, userId]);
+    DataService.getUser().then(setUser);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
-
-    const fetchData = async () => {
-      try {
-        const tasksData = await api.getTasks(user);
-        const loadedTasks = (tasksData || []).map(t => ({
-          ...t,
-          startDate: new Date(t.startDate),
-          deadline: new Date(t.deadline),
-          phases: (t.phases || []).map(p => ({ ...p, endDate: new Date(p.endDate) }))
-        }));
-
-        if (loadedTasks.length === 0) {
-          const seedTasksWithUser = SEED_TASKS.map(t => ({ ...t, userId: user }));
-          await Promise.all(seedTasksWithUser.map(t => api.upsertTask(t)));
-          setTasks(seedTasksWithUser.map(t => ({
-            ...t,
-            startDate: new Date(t.startDate),
-            deadline: new Date(t.deadline),
-            phases: (t.phases || []).map(p => ({ ...p, endDate: new Date(p.endDate) }))
-          })));
-        } else {
-          setTasks(loadedTasks);
-        }
-
-        const ideasData = await api.getIdeas(user);
-        setIdeas((ideasData || []).map(i => ({ id: i.id, ...i })));
-
-        try {
-          const artistsData = await api.getArtists(user);
-          if (artistsData && artistsData.list) setArtists(artistsData.list);
-          else {
-            await api.upsertArtists({ id: 'artists', userId: user, list: INITIAL_ARTISTS });
-            setArtists(INITIAL_ARTISTS);
-          }
-        } catch (e) {
-          await api.upsertArtists({ id: 'artists', userId: user, list: INITIAL_ARTISTS });
-          setArtists(INITIAL_ARTISTS);
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      }
-    };
-
-    fetchData();
+    DataService.getTasks().then(setTasks);
+    DataService.getIdeas().then(setIdeas);
+    DataService.getArtists().then(setArtists);
   }, [user]);
 
-  // Edit Logic: Switch based on Task Type
   const handleEditTask = (task) => {
       setEditingTask(task);
       setPrefillFromIdea(null);
@@ -885,97 +868,76 @@ export default function App() {
       }
   };
 
-  const handleSaveTask = async (task) => {
-      if (user) {
-          try {
-            await api.upsertTask({ ...task, userId: user });
-            if (prefillFromIdea) {
-              await api.deleteIdea(prefillFromIdea.id, user);
-              setActiveTab('timeline');
-            }
-            // Refresh local state minimally
-            setTasks(prev => {
-              const exists = prev.find(t => t.id === task.id);
-              if (exists) return prev.map(t => t.id === task.id ? { ...task } : t);
-              return [...prev, task];
-            });
-          } catch (e) {
-            console.error('Error saving task:', e);
-          }
-          setEditingTask(null);
-          setIsFormOpen(false);
+  const handleSaveTask = async (task) => { 
+      if(user) { 
+          await DataService.saveTask(task);
+          const freshTasks = await DataService.getTasks();
+          setTasks(freshTasks);
+
+          if(prefillFromIdea) { 
+              await DataService.deleteIdea(prefillFromIdea.id);
+              const freshIdeas = await DataService.getIdeas();
+              setIdeas(freshIdeas);
+              setActiveTab('timeline'); 
+          } 
+          setEditingTask(null); 
+          setIsFormOpen(false); 
           setIsSocialFormOpen(false);
+      } 
+  };
+  const handleDeleteTask = async (taskId) => { 
+      if(user) {
+          await DataService.deleteTask(taskId);
+          const freshTasks = await DataService.getTasks();
+          setTasks(freshTasks);
       }
   };
-  const handleDeleteTask = async (task) => {
-    if (!user) return;
-    try {
-      await api.deleteTask(task.id, user);
-      setTasks(prev => prev.filter(t => t.id !== task.id));
-    } catch (e) { console.error('Error deleting task:', e); }
-  };
-
-  const handleUpdateProgress = async (tid, pid, val) => {
-      const t = tasks.find(x=>x.id===tid);
-      if (t && user) {
-          try {
-              const updated = { ...t, phases: t.phases.map(p => p.id===pid ? {...p, progress: val} : p) };
-              await api.upsertTask({ ...updated, userId: user });
-              setTasks(prev => prev.map(x => x.id === tid ? updated : x));
-          } catch (e) { console.error('Error updating progress:', e); }
+  const handleUpdateProgress = async (tid, pid, val) => { 
+      const t = tasks.find(x=>x.id===tid); if(t && user) {
+          const updated = { ...t, phases: t.phases.map(p => p.id===pid ? {...p, progress: val} : p) };
+          await DataService.saveTask(updated);
+          // Optimistic update
+          setTasks(prev => prev.map(pt => pt.id === tid ? updated : pt));
       }
   };
-
-  const handleAddIdea = async (i) => {
-    if (!user) return;
-    try {
-      const payload = { ...i, id: String(Date.now()), userId: user };
-      await api.upsertIdea(payload);
-      setIdeas(prev => [...prev, payload]);
-    } catch (e) { console.error('Error adding idea:', e); }
-  };
-
-  const handleUpdateIdea = async (i) => {
-    if (!user) return;
-    try {
-      await api.upsertIdea({ ...i, userId: user });
-      setIdeas(prev => prev.map(x => x.id === i.id ? { ...x, ...i } : x));
-    } catch (e) { console.error('Error updating idea:', e); }
-  };
-
-  const handleMoveIdea = async (i, dir) => {
-    if (!user) return;
-    try {
-      const stages=['inbox','developing','ready'];
-      const idx = stages.indexOf(i.stage) + dir;
-      if (idx>=0 && idx<3) {
-        const updated = { ...i, stage: stages[idx], userId: user };
-        await api.upsertIdea(updated);
-        setIdeas(prev => prev.map(x => x.id === i.id ? updated : x));
+  
+  const handleAddIdea = async (i) => { 
+      if(user) {
+          await DataService.saveIdea(i);
+          const freshIdeas = await DataService.getIdeas();
+          setIdeas(freshIdeas);
       }
-    } catch (e) { console.error('Error moving idea:', e); }
   };
-
-  const handleDeleteIdea = async (id) => {
-    if (!user) return;
-    try {
-      await api.deleteIdea(id, user);
-      setIdeas(prev => prev.filter(x => x.id !== id));
-    } catch (e) { console.error('Error deleting idea:', e); }
+  const handleUpdateIdea = async (i) => { 
+      if(user) {
+          await DataService.saveIdea(i);
+          const freshIdeas = await DataService.getIdeas();
+          setIdeas(freshIdeas);
+      }
   };
-
+  const handleMoveIdea = async (i, dir) => { 
+      const stages=['inbox','developing','ready']; const idx=stages.indexOf(i.stage)+dir; 
+      if(idx>=0&&idx<3 && user) {
+          const updated = { ...i, stage: stages[idx] };
+          await DataService.saveIdea(updated);
+          setIdeas(prev => prev.map(x => x.id === i.id ? updated : x));
+      }
+  };
+  const handleDeleteIdea = async (id) => { 
+      if(user) {
+          await DataService.deleteIdea(id);
+          const freshIdeas = await DataService.getIdeas();
+          setIdeas(freshIdeas);
+      }
+  };
   const handlePromoteIdea = (i) => { setPrefillFromIdea({id:i.id, name:i.title, briefing:i.description}); setIsFormOpen(true); };
 
-  const handleAddResource = async (name) => {
-    if (!user) return;
-    if (!artists.includes(name)) {
-      setArtists(prev => {
-        const next = [...prev, name];
-        // persist
-        api.upsertArtists({ id: 'artists', userId: user, list: next }).catch(e => console.error('Error saving resource:', e));
-        return next;
-      });
-    }
+  const handleAddArtist = async (name) => {
+      if(user) {
+          await DataService.addArtist(name);
+          const freshArtists = await DataService.getArtists();
+          setArtists(freshArtists);
+      }
   };
 
   return (
@@ -994,7 +956,7 @@ export default function App() {
                     tasks={tasks} 
                     onRequestAsset={() => { setEditingTask(null); setIsSocialFormOpen(true); }} 
                     onUpdateProgress={handleUpdateProgress} 
-                    onDeleteTask={handleDeleteTask} 
+                    onDeleteTask={(t) => handleDeleteTask(t)} 
                 />
             )}
             {activeTab === 'timeline' && (
@@ -1015,7 +977,6 @@ export default function App() {
         </div>
       </div>
       
-      {/* STANDARD TASK FORM (PROJECTS) */}
       <TaskForm 
         isOpen={isFormOpen} 
         onClose={()=>{setIsFormOpen(false);setEditingTask(null);setPrefillFromIdea(null)}} 
@@ -1023,17 +984,16 @@ export default function App() {
         artists={artists} 
         initialData={editingTask} 
         prefillData={prefillFromIdea} 
-        onAddArtist={handleAddResource} 
+        onAddArtist={handleAddArtist} 
       />
 
-      {/* SOCIAL ASSET FORM (SOCIAL ONLY) */}
       <SocialTaskModal 
         isOpen={isSocialFormOpen}
         onClose={() => {setIsSocialFormOpen(false); setEditingTask(null);}}
         onSave={handleSaveTask}
         artists={artists}
         initialData={editingTask}
-        onAddArtist={handleAddResource}
+        onAddArtist={handleAddArtist}
       />
 
       <BriefModal isOpen={!!viewingBriefTask} onClose={()=>setViewingBriefTask(null)} task={viewingBriefTask} />
