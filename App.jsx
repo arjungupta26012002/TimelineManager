@@ -7,6 +7,10 @@ import {
   Database, Cloud
 } from 'lucide-react';
 
+// --- AZURE / AUTH IMPORTS ---
+// Uncomment these lines when deploying to production with Azure
+// import { useMsal, useIsAuthenticated } from '@azure/msal-react';
+
 // ==========================================
 // 1. CONSTANTS & CONFIG (Defined First)
 // ==========================================
@@ -145,30 +149,54 @@ const SEED_TASKS = [
 ];
 
 // ==========================================
-// 2. DATA SERVICE (Mocking Azure for UI)
+// 2. API / DATA SERVICE
 // ==========================================
 
-const MOCK_DELAY = 600; 
+const API_BASE = '/api';
 
-const mockApiCall = (data, delay = MOCK_DELAY) => 
-  new Promise(resolve => setTimeout(() => resolve(data), delay));
+// Safe fetch wrapper that handles non-JSON responses
+async function apiFetch(path, opts = {}) {
+  try {
+    const res = await fetch(`${API_BASE}/${path}`, opts);
+    if (!res.ok) {
+      console.warn(`API Error ${res.status}: ${path}`);
+      return null;
+    }
+    const ct = res.headers.get('content-type') || '';
+    if (ct.includes('application/json')) return res.json();
+    return null;
+  } catch (e) {
+    console.error("Fetch failed:", e);
+    // FALLBACK FOR PREVIEW MODE (Simulate Data if API fails)
+    if (path.includes('tasks')) return SEED_TASKS;
+    if (path.includes('artists')) return { list: INITIAL_ARTISTS };
+    return [];
+  }
+}
 
-// Internal Mock Database state
+// Internal Mock Database state for preview functionality
 let MOCK_DB = {
   tasks: [...SEED_TASKS],
   ideas: [],
   artists: [...INITIAL_ARTISTS]
 };
 
+const MOCK_DELAY = 600; 
+const mockApiCall = (data, delay = MOCK_DELAY) => 
+  new Promise(resolve => setTimeout(() => resolve(data), delay));
+
 const DataService = {
   getUser: async () => {
     // In real Azure, fetch('/.auth/me')
+    // Returning a mock user to ensure the UI renders
     return mockApiCall({ 
       userId: 'mock-user-id', 
       userDetails: 'studio_manager@example.com', 
       userRoles: ['authenticated'] 
     }, 200);
   },
+  
+  // Tasks
   getTasks: async () => mockApiCall([...MOCK_DB.tasks]),
   saveTask: async (task) => {
     const idx = MOCK_DB.tasks.findIndex(t => t.id === task.id);
@@ -180,6 +208,8 @@ const DataService = {
     MOCK_DB.tasks = MOCK_DB.tasks.filter(t => t.id !== taskId);
     return mockApiCall(true);
   },
+
+  // Ideas
   getIdeas: async () => mockApiCall([...MOCK_DB.ideas]),
   saveIdea: async (idea) => {
     const idx = MOCK_DB.ideas.findIndex(i => i.id === idea.id);
@@ -194,6 +224,8 @@ const DataService = {
     MOCK_DB.ideas = MOCK_DB.ideas.filter(i => i.id !== ideaId);
     return mockApiCall(true);
   },
+
+  // Artists/Resources
   getArtists: async () => mockApiCall([...MOCK_DB.artists]),
   addArtist: async (name) => {
     if (!MOCK_DB.artists.includes(name)) {
@@ -380,6 +412,7 @@ const SocialTaskModal = ({ isOpen, onClose, onSave, artists, initialData, onAddA
     );
 };
 
+// --- TASK FORM ---
 const TaskForm = ({ isOpen, onClose, onSave, artists, onAddArtist, initialData, prefillData }) => {
   const [formData, setFormData] = useState({
     artist: '',
@@ -538,6 +571,7 @@ const TaskForm = ({ isOpen, onClose, onSave, artists, onAddArtist, initialData, 
   );
 };
 
+// --- TIMELINE VIEW ---
 const Timeline = ({ tasks, onUpdateProgress, onEditTask, onViewBrief, setEditingTask, setIsFormOpen }) => {
   const [viewStart, setViewStart] = useState(getRelativeDate(-10));
   const daysToShow = 40; 
@@ -547,21 +581,27 @@ const Timeline = ({ tasks, onUpdateProgress, onEditTask, onViewBrief, setEditing
   const [activePhase, setActivePhase] = useState(null); 
   const calendarDays = useMemo(() => { const days = []; let current = new Date(viewStart); for (let i = 0; i < daysToShow; i++) { days.push(new Date(current)); current.setDate(current.getDate() + 1); } return days; }, [viewStart, daysToShow]);
   
+  // Group and Sort Tasks by Artist
   const groupedTasks = useMemo(() => {
     const groups = {};
+    if (!Array.isArray(tasks)) return { sortedArtists: [], groups: {} }; 
+
     tasks.forEach(t => {
       const artist = t.artist || 'Unassigned';
       if (!groups[artist]) groups[artist] = [];
       groups[artist].push(t);
     });
+
     const sortedArtists = Object.keys(groups).sort((a, b) => {
         if (a === 'Unassigned') return 1;
         if (b === 'Unassigned') return -1;
         return a.localeCompare(b);
     });
+
     sortedArtists.forEach(artist => {
         groups[artist].sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
     });
+
     return { sortedArtists, groups };
   }, [tasks]);
 
@@ -610,6 +650,7 @@ const Timeline = ({ tasks, onUpdateProgress, onEditTask, onViewBrief, setEditing
               );
             })}
           </div>
+          {/* Header Today Marker */}
           <div className="absolute top-0 bottom-0 z-20 pointer-events-none" style={{ left: getPositionStyles(today, today, viewStart, viewEnd).left, transform: 'translateX(-50%)' }}>
               <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-black mx-auto"></div>
               <div className="w-px h-full bg-black/80 mx-auto"></div>
@@ -618,6 +659,8 @@ const Timeline = ({ tasks, onUpdateProgress, onEditTask, onViewBrief, setEditing
       </div>
 
       <div className="flex-1 overflow-y-auto relative">
+        {/* BACKGROUND GRID LINES & TODAY LINE */}
+        {/* We place the grid lines in a container that mirrors the tasks area (right of the 48 unit sidebar) */}
         <div className="absolute inset-0 pl-48 pointer-events-none z-0">
            <div className="absolute left-48 right-0 top-0 bottom-0">
                <div className="absolute inset-0 flex">
@@ -627,12 +670,21 @@ const Timeline = ({ tasks, onUpdateProgress, onEditTask, onViewBrief, setEditing
                    return <div key={i} className={`flex-1 border-r border-gray-200 h-full ${dayColor} opacity-30`}></div>;
                  })}
                </div>
-               <div className="absolute top-0 bottom-0 border-l-2 border-red-500 z-30 opacity-60" style={{ left: getPositionStyles(today, today, viewStart, viewEnd).left, transform: 'translateX(-50%)' }}></div>
+               
+               {/* Full Height Today Line - Aligned with Header Marker */}
+               <div 
+                  className="absolute top-0 bottom-0 border-l-2 border-red-500 z-30 opacity-60"
+                  style={{ 
+                      left: getPositionStyles(today, today, viewStart, viewEnd).left,
+                      transform: 'translateX(-50%)'
+                  }}
+               ></div>
            </div>
         </div>
 
         {groupedTasks.sortedArtists.map(artist => (
             <React.Fragment key={artist}>
+                {/* Artist Group Header */}
                 <div className="flex h-8 bg-gray-50 border-b border-gray-200 sticky top-0 z-20">
                     <div className="w-48 flex-shrink-0 border-r border-gray-200 px-4 flex items-center gap-2 font-bold text-xs text-gray-600 uppercase tracking-wider bg-gray-50">
                         <User size={12} /> {artist}
@@ -642,6 +694,8 @@ const Timeline = ({ tasks, onUpdateProgress, onEditTask, onViewBrief, setEditing
                     </div>
                     <div className="flex-1 bg-gray-50/50"></div>
                 </div>
+
+                {/* Task Rows */}
                 {groupedTasks.groups[artist].map(task => (
                     <div key={task.id} className="flex h-24 border-b border-gray-100 relative group hover:bg-gray-50/50 transition-colors">
                         <div className="w-48 flex-shrink-0 border-r border-gray-200 bg-white z-10 p-3 flex flex-col justify-center gap-2 group-hover:bg-gray-50/50">
@@ -729,21 +783,23 @@ const SocialView = ({ tasks, onRequestAsset, onUpdateProgress, onDeleteTask }) =
 };
 
 const DashboardView = ({ tasks }) => {
-    const totalTasks = tasks.length;
-    const completedTasks = tasks.filter(t => { const lastPhase = t.phases[t.phases.length-1]; return lastPhase && lastPhase.progress === 100; }).length;
-    const artistLoad = useMemo(() => { const load = {}; tasks.forEach(t => { load[t.artist] = (load[t.artist] || 0) + 1; }); return load; }, [tasks]);
-    const socialCount = tasks.filter(t => t.type === 'social').length;
-    const projectCount = tasks.filter(t => t.type !== 'social').length;
+    // Ensure tasks is an array to prevent crash
+    const safeTasks = Array.isArray(tasks) ? tasks : [];
+    const totalTasks = safeTasks.length;
+    const completedTasks = safeTasks.filter(t => { const lastPhase = t.phases[t.phases.length-1]; return lastPhase && lastPhase.progress === 100; }).length;
+    const artistLoad = useMemo(() => { const load = {}; safeTasks.forEach(t => { load[t.artist] = (load[t.artist] || 0) + 1; }); return load; }, [safeTasks]);
+    const socialCount = safeTasks.filter(t => t.type === 'social').length;
+    const projectCount = safeTasks.filter(t => t.type !== 'social').length;
     return (
         <div className="p-8 max-w-6xl mx-auto space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4"><div className="p-4 bg-blue-50 text-blue-600 rounded-xl"><PieChart size={24} /></div><div><div className="text-2xl font-black text-gray-900">{totalTasks}</div><div className="text-xs text-gray-400 font-medium uppercase tracking-wide mt-1">{projectCount} Projects • {socialCount} Social</div></div></div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4"><div className="p-4 bg-orange-50 text-orange-600 rounded-xl"><AlertCircle size={24} /></div><div><div className="text-2xl font-black text-gray-900">{tasks.filter(t => { const d = new Date(t.deadline); return d > new Date() && d < new Date(Date.now() + 7 * 86400000); }).length}</div><div className="text-sm text-gray-500 font-medium uppercase tracking-wide">Due This Week</div></div></div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4"><div className="p-4 bg-orange-50 text-orange-600 rounded-xl"><AlertCircle size={24} /></div><div><div className="text-2xl font-black text-gray-900">{safeTasks.filter(t => { const d = new Date(t.deadline); return d > new Date() && d < new Date(Date.now() + 7 * 86400000); }).length}</div><div className="text-sm text-gray-500 font-medium uppercase tracking-wide">Due This Week</div></div></div>
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4"><div className="p-4 bg-green-50 text-green-600 rounded-xl"><Check size={24} /></div><div><div className="text-2xl font-black text-gray-900">{completedTasks}</div><div className="text-sm text-gray-500 font-medium uppercase tracking-wide">Completed</div></div></div>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><h3 className="font-bold text-gray-800 mb-6 flex items-center gap-2"><User size={18} /> Resource Workload (Includes Social)</h3><div className="space-y-4">{Object.entries(artistLoad).map(([artist, count]) => (<div key={artist} className="flex items-center gap-4"><div className="w-24 text-sm font-medium text-gray-600">{artist}</div><div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-pink-500 rounded-full" style={{ width: `${(count / totalTasks) * 100}%`}}></div></div><div className="w-8 text-right text-sm font-bold text-gray-900">{count}</div></div>))}</div></div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><h3 className="font-bold text-gray-800 mb-6 flex items-center gap-2"><Clock size={18} /> Urgent Deadlines</h3><div className="space-y-3">{tasks.filter(t => { const d = new Date(t.deadline); return d > new Date() && d < new Date(Date.now() + 7 * 86400000); }).map(t => (<div key={t.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100"><div><div className="font-bold text-gray-800 text-sm flex items-center gap-1">{t.type === 'social' && <Share2 size={10} className="text-violet-500"/>}{t.name}</div><div className="text-xs text-red-600 font-medium">{t.artist}</div></div><div className="text-xs font-bold bg-white px-2 py-1 rounded text-red-500 border border-red-100">{new Date(t.deadline).toLocaleDateString()}</div></div>))}</div></div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><h3 className="font-bold text-gray-800 mb-6 flex items-center gap-2"><Clock size={18} /> Urgent Deadlines</h3><div className="space-y-3">{safeTasks.filter(t => { const d = new Date(t.deadline); return d > new Date() && d < new Date(Date.now() + 7 * 86400000); }).map(t => (<div key={t.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100"><div><div className="font-bold text-gray-800 text-sm flex items-center gap-1">{t.type === 'social' && <Share2 size={10} className="text-violet-500"/>}{t.name}</div><div className="text-xs text-red-600 font-medium">{t.artist}</div></div><div className="text-xs font-bold bg-white px-2 py-1 rounded text-red-500 border border-red-100">{new Date(t.deadline).toLocaleDateString()}</div></div>))}</div></div>
             </div>
         </div>
     );
@@ -841,8 +897,10 @@ export default function App() {
   const [ideas, setIdeas] = useState([]);
   const [artists, setArtists] = useState(INITIAL_ARTISTS);
   const [activeTab, setActiveTab] = useState('social'); 
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isSocialFormOpen, setIsSocialFormOpen] = useState(false);
+  
+  // Modal Control
+  const [isFormOpen, setIsFormOpen] = useState(false); // TaskForm
+  const [isSocialFormOpen, setIsSocialFormOpen] = useState(false); // SocialTaskModal
   const [editingTask, setEditingTask] = useState(null);
   const [viewingBriefTask, setViewingBriefTask] = useState(null);
   const [prefillFromIdea, setPrefillFromIdea] = useState(null);
@@ -903,7 +961,8 @@ export default function App() {
   
   const handleAddIdea = async (i) => { 
       if(user) {
-          await DataService.saveIdea(i);
+          const payload = { ...i, id: String(Date.now()), userId: user };
+          await DataService.saveIdea(payload);
           const freshIdeas = await DataService.getIdeas();
           setIdeas(freshIdeas);
       }
@@ -918,7 +977,7 @@ export default function App() {
   const handleMoveIdea = async (i, dir) => { 
       const stages=['inbox','developing','ready']; const idx=stages.indexOf(i.stage)+dir; 
       if(idx>=0&&idx<3 && user) {
-          const updated = { ...i, stage: stages[idx] };
+          const updated = { ...i, stage: stages[idx], userId: user };
           await DataService.saveIdea(updated);
           setIdeas(prev => prev.map(x => x.id === i.id ? updated : x));
       }
@@ -946,7 +1005,7 @@ export default function App() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="h-16 bg-white border-b border-gray-200 flex items-center px-8 justify-between flex-shrink-0">
             <div className="text-lg font-bold text-gray-800 capitalize">{activeTab === 'pipeline' ? 'Idea Lab' : activeTab}</div>
-            <div className="text-xs text-gray-400">{user ? 'Sync Active' : '...'}</div>
+            <div className="text-xs text-gray-400">{user ? (typeof user === 'string' ? 'Sync Active' : user.userDetails) : 'Connecting...'}</div>
         </div>
         <div className="flex-1 overflow-auto bg-gray-50">
             {activeTab === 'dashboard' && <DashboardView tasks={tasks} />}
@@ -977,6 +1036,7 @@ export default function App() {
         </div>
       </div>
       
+      {/* STANDARD TASK FORM (PROJECTS) */}
       <TaskForm 
         isOpen={isFormOpen} 
         onClose={()=>{setIsFormOpen(false);setEditingTask(null);setPrefillFromIdea(null)}} 
@@ -987,6 +1047,7 @@ export default function App() {
         onAddArtist={handleAddArtist} 
       />
 
+      {/* SOCIAL ASSET FORM (SOCIAL ONLY) */}
       <SocialTaskModal 
         isOpen={isSocialFormOpen}
         onClose={() => {setIsSocialFormOpen(false); setEditingTask(null);}}
