@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { MsalProvider } from '@azure/msal-react'
 import { msalInstance } from './msalConfig.js'
+import './src/index.css'
 import App from './App.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
